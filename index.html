@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Splitbill — Ausgaben aufteilen</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f7f5f0;
+      --surface: #ffffff;
+      --surface2: #f0ede6;
+      --border: #e4dfd4;
+      --text: #1a1612;
+      --text-muted: #8a8278;
+      --accent: #d4570a;
+      --accent-light: #fff0e8;
+      --green: #1a7a4a;
+      --green-light: #e8f5ed;
+      --red: #c0392b;
+      --red-light: #fdf0ef;
+      --shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 16px rgba(0,0,0,.06);
+      --shadow-lg: 0 8px 32px rgba(0,0,0,.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Manrope', sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    /* ─── JOIN SCREEN ─── */
+    #join-screen {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg);
+    }
+    .join-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border-radius: 24px;
+      padding: 48px 40px;
+      box-shadow: var(--shadow-lg);
+      text-align: center;
+    }
+    .join-logo {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 32px;
+    }
+    .join-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 10px;
+    }
+    .join-sub {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-bottom: 36px;
+    }
+    .join-card input[type="text"] {
+      width: 100%;
+      padding: 14px 18px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--surface);
+      transition: border-color .2s;
+      outline: none;
+    }
+    .join-card input[type="text"]:focus { border-color: var(--accent); }
+    .btn-primary {
+      width: 100%;
+      margin-top: 12px;
+      padding: 14px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: 'Syne', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn-primary:hover { opacity: .9; }
+    .btn-primary:active { transform: scale(.98); }
+    .join-existing { margin-top: 28px; }
+    .join-existing h4 {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .existing-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    .chip {
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, border-color .15s;
+    }
+    .chip:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+    /* ─── MAIN APP ─── */
+    #app { display: none; min-height: 100vh; padding-bottom: 80px; }
+    #app.visible { display: block; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(247, 245, 240, .92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .topbar-brand {
+      font-family: 'Syne', sans-serif;
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -.01em;
+    }
+    .topbar-brand span { color: var(--accent); }
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-logout {
+      background: none;
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: color .15s, border-color .15s;
+    }
+    .btn-logout:hover { color: var(--text); border-color: var(--text); }
+
+    /* ─── TABS ─── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 16px 20px 0;
+      background: var(--bg);
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px 8px;
+      background: none;
+      border: none;
+      border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color .15s, background .15s;
+      border-bottom: 2px solid transparent;
+    }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ─── CONTENT ─── */
+    .tab-content { display: none; padding: 20px; }
+    .tab-content.active { display: block; }
+
+    /* ─── SUMMARY BAR ─── */
+    .summary-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .summary-card {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+    .summary-card .label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .summary-card .value {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .summary-card .value.positive { color: var(--green); }
+    .summary-card .value.negative { color: var(--red); }
+
+    /* ─── EXPENSE ITEMS ─── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .expense-list, .balance-list, .people-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .expense-item {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: start;
+      position: relative;
+      overflow: hidden;
+    }
+    .expense-item::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 3px 0 0 3px;
+    }
+    .expense-desc {
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+    .expense-meta {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .expense-paid-by {
+      background: var(--accent-light);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .expense-amount {
+      font-family: 'Syne', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      text-align: right;
+    }
+    .expense-amount small {
+      display: block;
+      font-family: 'Manrope', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .expense-actions { margin-top: 6px; text-align: right; }
+    .btn-delete {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: inherit;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color .15s, background .15s;
+    }
+    .btn-delete:hover { color: var(--red); background: var(--red-light); }
+
+    /* ─── BALANCE ITEMS ─── */
+    .balance-item {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .balance-from {
+      font-weight: 600;
+      font-size: 14px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .balance-arrow {
+      color: var(--text-muted);
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .balance-to {
+      font-weight: 600;
+      font-size: 14px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+    }
+    .balance-amount {
+      font-family: 'Syne', sans-serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--red);
+      flex-shrink: 0;
+      min-width: 80px;
+      text-align: center;
+    }
+    .balance-mine { background: var(--red-light); }
+    .balance-mine-to { background: var(--green-light); }
+
+    .balance-you-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-top: 2px;
+    }
+    .you-owe { background: var(--red-light); color: var(--red); }
+    .owe-you { background: var(--green-light); color: var(--green); }
+
+    /* ─── PEOPLE ─── */
+    .person-item {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .person-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-family: 'Syne', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .person-info { flex: 1; }
+    .person-name { font-weight: 600; font-size: 15px; }
+    .person-stats { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+    .person-balance { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; }
+
+    /* ─── EMPTY STATE ─── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 36px; margin-bottom: 10px; }
+    .empty-state p { font-size: 14px; }
+
+    /* ─── FAB ─── */
+    .fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 58px;
+      height: 58px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      font-size: 26px;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(212, 87, 10, .45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform .15s, box-shadow .15s;
+      z-index: 20;
+    }
+    .fab:hover { transform: scale(1.08); box-shadow: 0 6px 28px rgba(212, 87, 10, .55); }
+    .fab:active { transform: scale(.95); }
+
+    /* ─── MODAL ─── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(26, 22, 18, .55);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .25s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--surface);
+      border-radius: 24px 24px 0 0;
+      padding: 28px 24px 40px;
+      width: 100%;
+      max-width: 560px;
+      transform: translateY(40px);
+      transition: transform .3s cubic-bezier(.25, .8, .25, 1);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-handle {
+      width: 40px; height: 4px;
+      background: var(--border);
+      border-radius: 99px;
+      margin: 0 auto 24px;
+    }
+    .modal-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 24px;
+    }
+    .form-group { margin-bottom: 18px; }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      transition: border-color .2s;
+    }
+    .form-input:focus { border-color: var(--accent); }
+    .form-select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: inherit;
+      font-size: 15px;
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      appearance: none;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+    .form-select:focus { border-color: var(--accent); }
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+      user-select: none;
+    }
+    .checkbox-item:has(input:checked) {
+      border-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .checkbox-item input { display: none; }
+    .checkbox-custom {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      border: 2px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: transparent;
+      flex-shrink: 0;
+      transition: all .15s;
+    }
+    .checkbox-item:has(input:checked) .checkbox-custom {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-select-all {
+      font-size: 12px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+      padding: 0;
+      margin-bottom: 8px;
+    }
+    .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .btn-cancel {
+      flex: 1;
+      padding: 13px;
+      background: var(--surface2);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-cancel:hover { background: var(--border); }
+    .btn-submit {
+      flex: 2;
+      padding: 13px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius-sm);
+      font-family: 'Syne', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-submit:hover { opacity: .9; }
+    .btn-submit:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ─── TOAST ─── */
+    .toast {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--text);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 99px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity .25s, transform .25s;
+      z-index: 200;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ─── LOADER ─── */
+    .loader {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (min-width: 600px) {
+      .modal { border-radius: 24px; margin: 24px; }
+      .modal-overlay { align-items: center; }
+      .summary-bar { grid-template-columns: repeat(3, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── JOIN SCREEN ─── -->
+<div id="join-screen">
+  <div class="join-card">
+    <div class="join-logo">✦ Splitbill</div>
+    <h1 class="join-title">Wer bist du?</h1>
+    <p class="join-sub">Gib deinen Namen ein, um loszulegen.</p>
+    <input type="text" id="join-name" placeholder="Dein Name..." maxlength="40" autocomplete="off" />
+    <button class="btn-primary" id="join-btn">Beitreten →</button>
+    <div class="join-existing" id="join-existing" style="display:none">
+      <h4>Bereits dabei</h4>
+      <div class="existing-chips" id="existing-chips"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── MAIN APP ─── -->
+<div id="app">
+  <header class="topbar">
+    <div class="topbar-brand">Split<span>bill</span></div>
+    <div class="topbar-user">
+      <div class="avatar" id="user-avatar">–</div>
+      <span id="user-name-display" style="font-size:14px;font-weight:600;"></span>
+      <button class="btn-logout" id="logout-btn">Abmelden</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="expenses">Ausgaben</button>
+    <button class="tab-btn" data-tab="balances">Schulden</button>
+    <button class="tab-btn" data-tab="people">Personen</button>
+  </nav>
+
+  <!-- EXPENSES TAB -->
+  <div class="tab-content active" id="tab-expenses">
+    <div class="summary-bar" id="summary-bar">
+      <div class="summary-card">
+        <div class="label">Gesamt</div>
+        <div class="value" id="sum-total">–</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Du schuldest</div>
+        <div class="value negative" id="sum-owe">–</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Du bekommst</div>
+        <div class="value positive" id="sum-get">–</div>
+      </div>
+    </div>
+    <div class="section-header">
+      <span class="section-title">Alle Ausgaben</span>
+      <span style="font-size:12px;color:var(--text-muted)" id="expense-count"></span>
+    </div>
+    <div id="expense-list" class="expense-list">
+      <div class="loader"><div class="spinner"></div>Lade...</div>
+    </div>
+  </div>
+
+  <!-- BALANCES TAB -->
+  <div class="tab-content" id="tab-balances">
+    <div class="section-header" style="margin-bottom:6px">
+      <span class="section-title">Wer schuldet wem</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Schulden werden nicht vereinfacht — jede Ausgabe bleibt einzeln sichtbar.</p>
+    <div id="balance-list" class="balance-list">
+      <div class="loader"><div class="spinner"></div>Lade...</div>
+    </div>
+  </div>
+
+  <!-- PEOPLE TAB -->
+  <div class="tab-content" id="tab-people">
+    <div class="section-header">
+      <span class="section-title">Alle Mitglieder</span>
+    </div>
+    <div id="people-list" class="people-list">
+      <div class="loader"><div class="spinner"></div>Lade...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── FAB ─── -->
+<button class="fab" id="fab" style="display:none" aria-label="Ausgabe hinzufügen">+</button>
+
+<!-- ─── ADD EXPENSE MODAL ─── -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" role="dialog">
+    <div class="modal-handle"></div>
+    <h2 class="modal-title">Neue Ausgabe</h2>
+
+    <div class="form-group">
+      <label class="form-label" for="exp-desc">Beschreibung</label>
+      <input class="form-input" type="text" id="exp-desc" placeholder="z.B. Abendessen, Taxi..." maxlength="60" autocomplete="off" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="exp-amount">Betrag (€)</label>
+      <input class="form-input" type="number" id="exp-amount" placeholder="0,00" min="0.01" step="0.01" />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="exp-paid-by">Bezahlt von</label>
+      <select class="form-select" id="exp-paid-by"></select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Beteiligt</label>
+      <button class="btn-select-all" id="btn-select-all" type="button">Alle auswählen</button>
+      <div class="checkbox-grid" id="participants-grid"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" id="modal-cancel">Abbrechen</button>
+      <button class="btn-submit" id="modal-submit">Ausgabe speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TOAST ─── -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────
+let currentUser = null;
+let allUsers = [];
+let allExpenses = [];
+let allBalances = [];
+
+// ─── HELPERS ─────────────────────────────────────────────
+const fmt = (n) =>
+  new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+
+const initials = (name) =>
+  name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+const fmtDate = (iso) =>
+  new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' });
+
+function showToast(msg, duration = 2500) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ─── API ──────────────────────────────────────────────────
+async function api(path, method = 'GET', body = null) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Fehler');
+  }
+  return res.json();
+}
+
+async function loadData() {
+  const data = await api('/api/data');
+  allUsers = data.users;
+  allExpenses = data.expenses;
+  allBalances = data.balances;
+}
+
+// ─── JOIN SCREEN ──────────────────────────────────────────
+async function initJoinScreen() {
+  const users = await api('/api/users');
+  const chips = document.getElementById('existing-chips');
+  const existing = document.getElementById('join-existing');
+  chips.innerHTML = '';
+  if (users.length > 0) {
+    existing.style.display = 'block';
+    users.forEach(u => {
+      const chip = document.createElement('button');
+      chip.className = 'chip';
+      chip.textContent = u.name;
+      chip.addEventListener('click', () => joinAs(u));
+      chips.appendChild(chip);
+    });
+  }
+}
+
+async function joinAs(user) {
+  currentUser = user;
+  localStorage.setItem('splitbill_user', JSON.stringify(user));
+  showApp();
+}
+
+document.getElementById('join-btn').addEventListener('click', async () => {
+  const name = document.getElementById('join-name').value.trim();
+  if (!name) return;
+  const btn = document.getElementById('join-btn');
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const user = await api('/api/users', 'POST', { name });
+    await joinAs(user);
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Beitreten →';
+  }
+});
+
+document.getElementById('join-name').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+
+// ─── APP INIT ─────────────────────────────────────────────
+async function showApp() {
+  document.getElementById('join-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('fab').style.display = 'flex';
+
+  document.getElementById('user-avatar').textContent = initials(currentUser.name);
+  document.getElementById('user-name-display').textContent = currentUser.name;
+
+  await refreshData();
+}
+
+async function refreshData() {
+  await loadData();
+  renderExpenses();
+  renderBalances();
+  renderPeople();
+}
+
+// ─── TABS ─────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ─── RENDER EXPENSES ─────────────────────────────────────
+function renderExpenses() {
+  const list = document.getElementById('expense-list');
+  const userMap = {};
+  allUsers.forEach(u => userMap[u.id] = u.name);
+
+  // Summary
+  const total = allExpenses.reduce((s, e) => s + e.amount, 0);
+  let iOwe = 0, iGetBack = 0;
+  allBalances.forEach(b => {
+    if (b.fromId === currentUser.id) iOwe += b.amount;
+    if (b.toId === currentUser.id) iGetBack += b.amount;
+  });
+  document.getElementById('sum-total').textContent = fmt(total);
+  document.getElementById('sum-owe').textContent = fmt(iOwe);
+  document.getElementById('sum-get').textContent = fmt(iGetBack);
+  document.getElementById('expense-count').textContent = allExpenses.length + ' Ausgabe' + (allExpenses.length !== 1 ? 'n' : '');
+
+  if (allExpenses.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🧾</div><p>Noch keine Ausgaben.<br>Füge die erste mit dem + Button hinzu.</p></div>`;
+    return;
+  }
+
+  list.innerHTML = allExpenses.map(exp => {
+    const paidByName = userMap[exp.paidBy] || exp.paidBy;
+    const share = exp.amount / exp.participants.length;
+    const iAmParticipant = exp.participants.includes(currentUser.id);
+    const iPaid = exp.paidBy === currentUser.id;
+    const canDelete = iPaid;
+
+    const participants = exp.participants.map(id => userMap[id] || id).join(', ');
+    return `
+      <div class="expense-item">
+        <div>
+          <div class="expense-desc">${esc(exp.description)}</div>
+          <div class="expense-meta">
+            <span class="expense-paid-by">${esc(paidByName)}</span>
+            <span>${fmtDate(exp.date)}</span>
+            <span>·</span>
+            <span>${esc(participants)}</span>
+          </div>
+          ${canDelete ? `<div class="expense-actions"><button class="btn-delete" data-id="${exp.id}">🗑 Löschen</button></div>` : ''}
+        </div>
+        <div>
+          <div class="expense-amount">${fmt(exp.amount)}<small>${fmt(share)} / Person</small></div>
+          ${iAmParticipant && !iPaid ? `<div style="text-align:right;margin-top:6px"><span class="balance-you-tag you-owe">du schuldest</span></div>` : ''}
+          ${iPaid && exp.participants.length > 1 ? `<div style="text-align:right;margin-top:6px"><span class="balance-you-tag owe-you">du hast gezahlt</span></div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', () => deleteExpense(btn.dataset.id));
+  });
+}
+
+// ─── RENDER BALANCES ─────────────────────────────────────
+function renderBalances() {
+  const list = document.getElementById('balance-list');
+
+  if (allBalances.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🎉</div><p>Keine offenen Schulden.<br>Alle sind quitt!</p></div>`;
+    return;
+  }
+
+  // Sort: my debts first, then others
+  const sorted = [...allBalances].sort((a, b) => {
+    const aMe = a.fromId === currentUser.id || a.toId === currentUser.id;
+    const bMe = b.fromId === currentUser.id || b.toId === currentUser.id;
+    if (aMe && !bMe) return -1;
+    if (!aMe && bMe) return 1;
+    return b.amount - a.amount;
+  });
+
+  list.innerHTML = sorted.map(b => {
+    const iOwe = b.fromId === currentUser.id;
+    const owesMe = b.toId === currentUser.id;
+    const cls = iOwe ? 'balance-mine' : owesMe ? 'balance-mine-to' : '';
+    return `
+      <div class="balance-item ${cls}">
+        <div>
+          <div class="balance-from">${esc(b.from)}</div>
+          ${iOwe ? '<div><span class="balance-you-tag you-owe">das bist du</span></div>' : ''}
+        </div>
+        <div class="balance-arrow">→</div>
+        <div class="balance-amount">${fmt(b.amount)}</div>
+        <div>
+          <div class="balance-to">${esc(b.to)}</div>
+          ${owesMe ? '<div style="text-align:right"><span class="balance-you-tag owe-you">das bist du</span></div>' : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── RENDER PEOPLE ────────────────────────────────────────
+function renderPeople() {
+  const list = document.getElementById('people-list');
+
+  if (allUsers.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">👥</div><p>Noch niemand dabei.</p></div>`;
+    return;
+  }
+
+  const userMap = {};
+  allUsers.forEach(u => userMap[u.id] = u.name);
+
+  list.innerHTML = allUsers.map(u => {
+    const paid = allExpenses.filter(e => e.paidBy === u.id).reduce((s, e) => s + e.amount, 0);
+    const owes = allBalances.filter(b => b.fromId === u.id).reduce((s, b) => s + b.amount, 0);
+    const gets = allBalances.filter(b => b.toId === u.id).reduce((s, b) => s + b.amount, 0);
+    const net = gets - owes;
+    const isMe = u.id === currentUser.id;
+
+    const avatarColors = ['#d4570a','#1a7a4a','#2563eb','#7c3aed','#b45309','#0e7490'];
+    const colorIdx = u.name.charCodeAt(0) % avatarColors.length;
+
+    return `
+      <div class="person-item">
+        <div class="person-avatar" style="background:${avatarColors[colorIdx]}">${initials(u.name)}</div>
+        <div class="person-info">
+          <div class="person-name">${esc(u.name)}${isMe ? ' <span style="font-size:11px;color:var(--text-muted)">(du)</span>' : ''}</div>
+          <div class="person-stats">Hat ${fmt(paid)} bezahlt</div>
+        </div>
+        <div class="person-balance" style="color:${net >= 0 ? 'var(--green)' : 'var(--red)'}">
+          ${net >= 0 ? '+' : ''}${fmt(net)}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── DELETE EXPENSE ──────────────────────────────────────
+async function deleteExpense(id) {
+  if (!confirm('Ausgabe wirklich löschen?')) return;
+  try {
+    await api(`/api/expenses?id=${id}`, 'DELETE');
+    showToast('Ausgabe gelöscht');
+    await refreshData();
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
+  }
+}
+
+// ─── ADD EXPENSE MODAL ───────────────────────────────────
+const overlay = document.getElementById('modal-overlay');
+
+document.getElementById('fab').addEventListener('click', openModal);
+document.getElementById('modal-cancel').addEventListener('click', closeModal);
+overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+function openModal() {
+  const paidBySelect = document.getElementById('exp-paid-by');
+  const grid = document.getElementById('participants-grid');
+
+  paidBySelect.innerHTML = allUsers.map(u =>
+    `<option value="${u.id}" ${u.id === currentUser.id ? 'selected' : ''}>${esc(u.name)}</option>`
+  ).join('');
+
+  grid.innerHTML = allUsers.map(u => `
+    <label class="checkbox-item">
+      <input type="checkbox" value="${u.id}" ${true ? 'checked' : ''} />
+      <span class="checkbox-custom">✓</span>
+      <span style="font-size:14px;font-weight:500">${esc(u.name)}</span>
+    </label>`
+  ).join('');
+
+  document.getElementById('exp-desc').value = '';
+  document.getElementById('exp-amount').value = '';
+  overlay.classList.add('open');
+  document.getElementById('exp-desc').focus();
+}
+
+function closeModal() {
+  overlay.classList.remove('open');
+}
+
+document.getElementById('btn-select-all').addEventListener('click', () => {
+  const checkboxes = document.querySelectorAll('#participants-grid input[type="checkbox"]');
+  const allChecked = [...checkboxes].every(c => c.checked);
+  checkboxes.forEach(c => c.checked = !allChecked);
+  document.getElementById('btn-select-all').textContent = allChecked ? 'Alle auswählen' : 'Alle abwählen';
+});
+
+document.getElementById('modal-submit').addEventListener('click', async () => {
+  const desc = document.getElementById('exp-desc').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const paidBy = document.getElementById('exp-paid-by').value;
+  const participants = [...document.querySelectorAll('#participants-grid input:checked')].map(c => c.value);
+
+  if (!desc) return showToast('Bitte Beschreibung eingeben');
+  if (!amount || amount <= 0) return showToast('Bitte gültigen Betrag eingeben');
+  if (participants.length === 0) return showToast('Bitte mindestens eine Person auswählen');
+
+  const btn = document.getElementById('modal-submit');
+  btn.disabled = true;
+  btn.textContent = 'Speichern…';
+
+  try {
+    await api('/api/expenses', 'POST', { description: desc, amount, paidBy, participants });
+    closeModal();
+    showToast('Ausgabe gespeichert ✓');
+    await refreshData();
+  } catch(e) {
+    showToast('Fehler: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ausgabe speichern';
+  }
+});
+
+// ─── LOGOUT ──────────────────────────────────────────────
+document.getElementById('logout-btn').addEventListener('click', () => {
+  localStorage.removeItem('splitbill_user');
+  location.reload();
+});
+
+// ─── ESCAPE HTML ─────────────────────────────────────────
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── BOOT ────────────────────────────────────────────────
+(async () => {
+  const saved = localStorage.getItem('splitbill_user');
+  if (saved) {
+    try {
+      currentUser = JSON.parse(saved);
+      showApp();
+      return;
+    } catch(e) { /* invalid, fall through */ }
+  }
+  await initJoinScreen();
+})();
+</script>
+</body>
+</html>
