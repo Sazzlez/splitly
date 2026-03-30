@@ -1,14 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import Head from 'next/head';
 
-// ─── Viewport meta (verhindert Auto-Zoom im mobilen Browser) ─────────────────
 const ViewportMeta = () => (
   <Head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   </Head>
 );
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 interface User { id: string; name: string; }
 interface Participant { userId: string; percent: number; }
 interface Expense {
@@ -20,9 +18,9 @@ interface Expense {
   participants: Participant[];
   createdBy: string;
   settled: boolean;
+  settledBy?: string[];
 }
 
-// ─── API ──────────────────────────────────────────────────────────────────────
 const api = async (path: string, opts?: RequestInit, token?: string) => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -30,11 +28,9 @@ const api = async (path: string, opts?: RequestInit, token?: string) => {
   return r.json();
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: 'short', year: 'numeric' });
 
-// ─── Shared UI ────────────────────────────────────────────────────────────────
 function Input({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -94,7 +90,6 @@ function Select({ label, value, onChange, children }: { label: string; value: st
   );
 }
 
-// ─── Participant editor (shared by add & edit) ────────────────────────────────
 function ParticipantEditor({ users, participants, setParticipants, amount }: {
   users: User[];
   participants: Participant[];
@@ -176,7 +171,6 @@ function ParticipantEditor({ users, participants, setParticipants, amount }: {
   );
 }
 
-// ─── LOGIN ────────────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (token: string, user: User) => void }) {
   const [users, setUsers] = useState<User[]>([]);
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -256,16 +250,11 @@ function LoginScreen({ onLogin }: { onLogin: (token: string, user: User) => void
   );
 }
 
-// ─── SUCCESS TOAST ────────────────────────────────────────────────────────────
 function SuccessToast({ visible }: { visible: boolean }) {
   return (
     <div style={{
-      position: 'fixed',
-      bottom: 100,
-      left: '50%',
-      transform: `translateX(-50%) translateY(${visible ? '0' : '20px'}) scale(${visible ? '1' : '0.96'})`,
-      zIndex: 200,
-      pointerEvents: 'none',
+      position: 'fixed', bottom: 100, left: '50%', transform: `translateX(-50%) translateY(${visible ? '0' : '20px'})`,
+      zIndex: 200, pointerEvents: 'none',
       opacity: visible ? 1 : 0,
       transition: 'opacity 0.25s ease, transform 0.25s ease',
     }}>
@@ -275,7 +264,6 @@ function SuccessToast({ visible }: { visible: boolean }) {
         borderRadius: 14, padding: '12px 20px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
       }}>
-        {/* Animierter SVG-Haken */}
         <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style={{ flexShrink: 0 }}>
           <circle cx="11" cy="11" r="10" stroke="#6ee7b7" strokeWidth="1.5" />
           <path
@@ -296,6 +284,7 @@ function SuccessToast({ visible }: { visible: boolean }) {
     </div>
   );
 }
+
 function AddExpenseTab({ users, currentUser, token, onAdded }: {
   users: User[]; currentUser: User; token: string; onAdded: () => void;
 }) {
@@ -350,7 +339,6 @@ function AddExpenseTab({ users, currentUser, token, onAdded }: {
   );
 }
 
-// ─── EDIT MODAL ───────────────────────────────────────────────────────────────
 function EditModal({ expense, users, token, onClose, onSaved }: {
   expense: Expense; users: User[]; token: string; onClose: () => void; onSaved: () => void;
 }) {
@@ -417,7 +405,6 @@ function EditModal({ expense, users, token, onClose, onSaved }: {
   );
 }
 
-// ─── ACTIVITY TAB ─────────────────────────────────────────────────────────────
 function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
   expenses: Expense[]; users: User[]; currentUser: User; token: string; onRefresh: () => void;
 }) {
@@ -454,7 +441,6 @@ function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
           onClose={() => setEditingExpense(null)} onSaved={onRefresh} />
       )}
 
-      {/* Confirm delete dialog */}
       {deletingId && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex',
@@ -528,245 +514,291 @@ function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
   );
 }
 
-// ─── DEBTS TAB ────────────────────────────────────────────────────────────────
 function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
   expenses: Expense[]; users: User[]; currentUser: User; token: string; onRefresh: () => void;
 }) {
   const [settlingKey, setSettlingKey] = useState<string | null>(null);
+  const [expandedPairs, setExpandedPairs] = useState<string[]>([]);
   const getName = (id: string) => users.find(u => u.id === id)?.name || id;
 
-  type PairAggregate = {
-    pairKey: string;
-    userA: string;
-    userB: string;
-    openAToB: number;
-    openBToA: number;
-    settledAToB: number;
-    settledBToA: number;
-    openExpenseIds: string[];
-  };
-
-  type DisplayDebt = {
+  type PairDetail = {
     key: string;
-    pairKey: string;
+    expenseId: string;
+    description: string;
+    date: string;
     from: string;
     to: string;
     amount: number;
-    isSettled: boolean;
-    showSettle: boolean;
-    openExpenseIds: string[];
-    grossFromTo: number;
-    grossToFrom: number;
+    settled: boolean;
+    canSettle: boolean;
   };
 
-  const pairMap: Record<string, PairAggregate> = {};
+  type PairSummary = {
+    pairKey: string;
+    userA: string;
+    userB: string;
+    details: PairDetail[];
+    hasOpen: boolean;
+    hasSettled: boolean;
+    isBalanced: boolean;
+    grossOpenAToB: number;
+    grossOpenBToA: number;
+    grossSettledAToB: number;
+    grossSettledBToA: number;
+    openNet: number;
+    openFrom: string | null;
+    openTo: string | null;
+    settledNet: number;
+    settledFrom: string | null;
+    settledTo: string | null;
+  };
 
-  const getPair = (user1: string, user2: string) => {
+  const pairMap: Record<string, { pairKey: string; userA: string; userB: string; details: PairDetail[] }> = {};
+
+  const ensurePair = (user1: string, user2: string) => {
     const [userA, userB] = [user1, user2].sort();
     const pairKey = `${userA}__${userB}`;
-
     if (!pairMap[pairKey]) {
-      pairMap[pairKey] = {
-        pairKey,
-        userA,
-        userB,
-        openAToB: 0,
-        openBToA: 0,
-        settledAToB: 0,
-        settledBToA: 0,
-        openExpenseIds: [],
-      };
+      pairMap[pairKey] = { pairKey, userA, userB, details: [] };
     }
-
     return pairMap[pairKey];
   };
 
   expenses.forEach(exp => {
-    exp.participants.forEach(p => {
-      if (p.userId === exp.paidBy) return;
-
-      const from = p.userId;
-      const to = exp.paidBy;
-      const amount = (exp.amount * p.percent) / 100;
+    exp.participants.forEach(participant => {
+      if (participant.userId === exp.paidBy) return;
+      const amount = (exp.amount * participant.percent) / 100;
       if (amount < 0.01) return;
 
-      const pair = getPair(from, to);
-      const isAToB = from === pair.userA && to === pair.userB;
+      const from = participant.userId;
+      const to = exp.paidBy;
+      const pair = ensurePair(from, to);
+      const isSettled = exp.settled || (exp.settledBy || []).includes(from);
 
-      if (exp.settled) {
-        if (isAToB) pair.settledAToB += amount;
-        else pair.settledBToA += amount;
-      } else {
-        if (isAToB) pair.openAToB += amount;
-        else pair.openBToA += amount;
-
-        if (!pair.openExpenseIds.includes(exp.id)) {
-          pair.openExpenseIds.push(exp.id);
-        }
-      }
+      pair.details.push({
+        key: `${exp.id}__${from}`,
+        expenseId: exp.id,
+        description: exp.description,
+        date: exp.date,
+        from,
+        to,
+        amount,
+        settled: isSettled,
+        canSettle: !isSettled && to === currentUser.id,
+      });
     });
   });
 
-  const displayDebts: DisplayDebt[] = [];
+  const pairSummaries: PairSummary[] = Object.values(pairMap)
+    .map(pair => {
+      let grossOpenAToB = 0;
+      let grossOpenBToA = 0;
+      let grossSettledAToB = 0;
+      let grossSettledBToA = 0;
 
-  Object.values(pairMap).forEach(pair => {
-    const openDiff = pair.openAToB - pair.openBToA;
-    if (Math.abs(openDiff) > 0.01) {
-      const from = openDiff > 0 ? pair.userA : pair.userB;
-      const to = openDiff > 0 ? pair.userB : pair.userA;
-
-      displayDebts.push({
-        key: `${pair.pairKey}__open`,
-        pairKey: pair.pairKey,
-        from,
-        to,
-        amount: Math.abs(openDiff),
-        isSettled: false,
-        showSettle: to === currentUser.id,
-        openExpenseIds: pair.openExpenseIds,
-        grossFromTo: openDiff > 0 ? pair.openAToB : pair.openBToA,
-        grossToFrom: openDiff > 0 ? pair.openBToA : pair.openAToB,
+      pair.details.forEach(detail => {
+        const isAToB = detail.from === pair.userA && detail.to === pair.userB;
+        if (detail.settled) {
+          if (isAToB) grossSettledAToB += detail.amount;
+          else grossSettledBToA += detail.amount;
+        } else {
+          if (isAToB) grossOpenAToB += detail.amount;
+          else grossOpenBToA += detail.amount;
+        }
       });
-    }
 
-    const settledDiff = pair.settledAToB - pair.settledBToA;
-    if (Math.abs(settledDiff) > 0.01) {
-      const from = settledDiff > 0 ? pair.userA : pair.userB;
-      const to = settledDiff > 0 ? pair.userB : pair.userA;
+      const openDiff = grossOpenAToB - grossOpenBToA;
+      const settledDiff = grossSettledAToB - grossSettledBToA;
+      const hasOpen = grossOpenAToB + grossOpenBToA > 0.01;
+      const hasSettled = grossSettledAToB + grossSettledBToA > 0.01;
+      const isBalanced = hasOpen && Math.abs(openDiff) < 0.01;
 
-      displayDebts.push({
-        key: `${pair.pairKey}__settled`,
+      return {
         pairKey: pair.pairKey,
-        from,
-        to,
-        amount: Math.abs(settledDiff),
-        isSettled: true,
-        showSettle: false,
-        openExpenseIds: [],
-        grossFromTo: settledDiff > 0 ? pair.settledAToB : pair.settledBToA,
-        grossToFrom: settledDiff > 0 ? pair.settledBToA : pair.settledAToB,
-      });
-    }
-  });
+        userA: pair.userA,
+        userB: pair.userB,
+        details: pair.details,
+        hasOpen,
+        hasSettled,
+        isBalanced,
+        grossOpenAToB,
+        grossOpenBToA,
+        grossSettledAToB,
+        grossSettledBToA,
+        openNet: Math.abs(openDiff),
+        openFrom: openDiff > 0 ? pair.userA : openDiff < 0 ? pair.userB : null,
+        openTo: openDiff > 0 ? pair.userB : openDiff < 0 ? pair.userA : null,
+        settledNet: Math.abs(settledDiff),
+        settledFrom: settledDiff > 0 ? pair.userA : settledDiff < 0 ? pair.userB : null,
+        settledTo: settledDiff > 0 ? pair.userB : settledDiff < 0 ? pair.userA : null,
+      };
+    })
+    .filter(pair => pair.hasOpen || pair.hasSettled)
+    .sort((a, b) => {
+      if (a.hasOpen !== b.hasOpen) return a.hasOpen ? -1 : 1;
+      return (b.openNet || b.settledNet) - (a.openNet || a.settledNet);
+    });
 
-  const sortedDebts = displayDebts.sort((a, b) => {
-    if (a.isSettled !== b.isSettled) return a.isSettled ? 1 : -1;
-    if (a.to === currentUser.id && b.to !== currentUser.id) return -1;
-    if (a.to !== currentUser.id && b.to === currentUser.id) return 1;
-    if (a.from === currentUser.id && b.from !== currentUser.id) return -1;
-    if (a.from !== currentUser.id && b.from === currentUser.id) return 1;
-    return b.amount - a.amount;
-  });
+  const openPairs = pairSummaries.filter(pair => pair.hasOpen && !pair.isBalanced);
+  const balancedPairs = pairSummaries.filter(pair => pair.hasOpen && pair.isBalanced);
+  const settledPairs = pairSummaries.filter(pair => !pair.hasOpen && pair.hasSettled);
 
-  const myDebts = sortedDebts.filter(d => d.from === currentUser.id);
-  const owedToMe = sortedDebts.filter(d => d.to === currentUser.id);
-  const otherDebts = sortedDebts.filter(d => d.from !== currentUser.id && d.to !== currentUser.id);
+  const myDebts = openPairs.filter(pair => pair.openFrom === currentUser.id);
+  const owedToMe = openPairs.filter(pair => pair.openTo === currentUser.id);
+  const otherDebts = openPairs.filter(pair => pair.openFrom !== currentUser.id && pair.openTo !== currentUser.id);
 
-  const handleSettle = async (debt: DisplayDebt) => {
-    setSettlingKey(debt.key);
-
-    for (const id of debt.openExpenseIds) {
-      await api('/api/settled', { method: 'POST', body: JSON.stringify({ id }) }, token);
-    }
-
-    setSettlingKey(null);
-    onRefresh();
+  const toggleExpanded = (pairKey: string) => {
+    setExpandedPairs(prev => prev.includes(pairKey) ? prev.filter(key => key !== pairKey) : [...prev, pairKey]);
   };
 
-  const DebtRow = ({ debt }: { debt: DisplayDebt }) => {
-    const isLoading = settlingKey === debt.key;
-    const wasNetted = debt.grossToFrom > 0.01;
+  const handleSettle = async (detail: PairDetail) => {
+    setSettlingKey(detail.key);
+    const data = await api('/api/settled', {
+      method: 'POST',
+      body: JSON.stringify({ id: detail.expenseId, debtorUserId: detail.from }),
+    }, token);
+    setSettlingKey(null);
+    if (!data.error) onRefresh();
+  };
+
+  const PairRow = ({ pair }: { pair: PairSummary }) => {
+    const isExpanded = expandedPairs.includes(pair.pairKey);
+    const isSettledSummary = !pair.hasOpen && pair.hasSettled;
+    const showBalanced = pair.hasOpen && pair.isBalanced;
+    const amount = showBalanced ? 0 : (pair.hasOpen ? pair.openNet : pair.settledNet);
+    const detailRows = [...pair.details].sort((a, b) => {
+      if (a.settled !== b.settled) return a.settled ? 1 : -1;
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+    const hasNetting = pair.grossOpenAToB > 0.01 && pair.grossOpenBToA > 0.01;
 
     return (
       <div style={{
         borderRadius: 12,
         background: 'var(--surface2)',
-        border: `1px solid ${debt.isSettled ? 'rgba(110,231,183,0.25)' : 'var(--border)'}`,
+        border: `1px solid ${isSettledSummary ? 'rgba(110,231,183,0.25)' : 'var(--border)'}`,
         overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
+        <div onClick={() => toggleExpanded(pair.pairKey)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: debt.isSettled ? 'var(--muted)' : 'var(--text)',
-                textDecoration: debt.isSettled ? 'line-through' : 'none',
-              }}>
-                {getName(debt.from)}
-              </span>
-              <span style={{ color: 'var(--muted)', fontSize: 12 }}>→</span>
-              <span style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: debt.isSettled ? 'var(--muted)' : 'var(--text)',
-                textDecoration: debt.isSettled ? 'line-through' : 'none',
-              }}>
-                {getName(debt.to)}
-              </span>
-              {debt.isSettled && (
-                <span style={{
-                  fontSize: 10,
-                  background: 'rgba(110,231,183,0.15)',
-                  color: 'var(--accent)',
-                  borderRadius: 4,
-                  padding: '1px 6px',
-                  fontWeight: 600,
-                }}>
-                  BEGLICHEN
-                </span>
+              {showBalanced ? (
+                <>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{getName(pair.userA)}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>⇄</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{getName(pair.userB)}</span>
+                  <span style={{ fontSize: 10, background: 'rgba(255,255,255,0.06)', color: 'var(--muted)', borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}>
+                    VERRECHNET
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: isSettledSummary ? 'var(--muted)' : 'var(--text)',
+                    textDecoration: isSettledSummary ? 'line-through' : 'none',
+                  }}>{getName(pair.hasOpen ? pair.openFrom || pair.userA : pair.settledFrom || pair.userA)}</span>
+                  <span style={{ color: 'var(--muted)', fontSize: 12 }}>→</span>
+                  <span style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: isSettledSummary ? 'var(--muted)' : 'var(--text)',
+                    textDecoration: isSettledSummary ? 'line-through' : 'none',
+                  }}>{getName(pair.hasOpen ? pair.openTo || pair.userB : pair.settledTo || pair.userB)}</span>
+                  {isSettledSummary && (
+                    <span style={{ fontSize: 10, background: 'rgba(110,231,183,0.15)', color: 'var(--accent)', borderRadius: 4, padding: '1px 6px', fontWeight: 600 }}>
+                      BEGLICHEN
+                    </span>
+                  )}
+                </>
               )}
             </div>
 
-            {wasNetted && (
-              <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
-                  Verrechnet: <span style={{ fontFamily: 'DM Mono', color: 'var(--text)' }}>{fmt(debt.grossFromTo)}</span> - <span style={{ fontFamily: 'DM Mono', color: 'var(--text)' }}>{fmt(debt.grossToFrom)}</span>
-                </span>
-              </div>
+            {hasNetting && !showBalanced && (
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Verrechnet: {fmt(Math.max(pair.grossOpenAToB, pair.grossOpenBToA))} - {fmt(Math.min(pair.grossOpenAToB, pair.grossOpenBToA))}
+              </p>
+            )}
+
+            {showBalanced && (
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                Kein offener Nettobetrag mehr.
+              </p>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{
-              fontFamily: 'DM Mono',
-              fontWeight: 700,
-              fontSize: 16,
-              color: debt.isSettled ? 'var(--muted)' : 'var(--text)',
-            }}>
-              {fmt(debt.amount)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 16, color: isSettledSummary ? 'var(--muted)' : 'var(--text)' }}>
+              {fmt(amount)}
             </span>
-
-            {debt.showSettle && !debt.isSettled && (
-              <button
-                onClick={() => handleSettle(debt)}
-                disabled={isLoading}
-                title="Als beglichen markieren"
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  border: '1.5px solid var(--border)',
-                  background: 'var(--surface)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 14,
-                  transition: 'all .2s',
-                  flexShrink: 0,
-                  color: 'var(--muted)',
-                }}>
-                {isLoading ? '…' : '○'}
-              </button>
-            )}
+            <span style={{ color: 'var(--muted)', fontSize: 14 }}>{isExpanded ? '▾' : '▸'}</span>
           </div>
         </div>
+
+        {isExpanded && (
+          <div style={{ borderTop: '1px solid var(--border)', padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {detailRows.map(detail => {
+              const isLoading = settlingKey === detail.key;
+              return (
+                <div key={detail.key} style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  background: 'var(--surface)',
+                  border: `1px solid ${detail.settled ? 'rgba(110,231,183,0.2)' : 'var(--border)'}`,
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: detail.settled ? 'var(--muted)' : 'var(--text)', textDecoration: detail.settled ? 'line-through' : 'none' }}>
+                      {detail.description}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                      {getName(detail.from)} → {getName(detail.to)} · {fmtDate(detail.date)}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontFamily: 'DM Mono', fontSize: 14, fontWeight: 700, color: detail.settled ? 'var(--muted)' : 'var(--text)' }}>
+                      {fmt(detail.amount)}
+                    </span>
+                    {detail.settled ? (
+                      <span style={{ fontSize: 10, background: 'rgba(110,231,183,0.15)', color: 'var(--accent)', borderRadius: 4, padding: '2px 6px', fontWeight: 600 }}>
+                        BEGLICHEN
+                      </span>
+                    ) : detail.canSettle ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleSettle(detail); }}
+                        disabled={isLoading}
+                        title="Diese Schuld als beglichen markieren"
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 8,
+                          border: '1.5px solid var(--border)',
+                          background: 'var(--surface2)',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 14,
+                          color: 'var(--muted)',
+                        }}
+                      >
+                        {isLoading ? '…' : '○'}
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
 
-  if (!sortedDebts.length) return (
+  if (!pairSummaries.length) return (
     <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
       <p>Alles ausgeglichen!</p>
@@ -783,7 +815,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             Du schuldest
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {myDebts.map(d => <DebtRow key={d.key} debt={d} />)}
+            {myDebts.map(pair => <PairRow key={pair.pairKey} pair={pair} />)}
           </div>
         </div>
       )}
@@ -792,12 +824,9 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
         <div>
           <p style={{ fontSize: 12, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
             Dir wird geschuldet
-            <span style={{ marginLeft: 6, color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
-              (○ = als beglichen markieren)
-            </span>
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {owedToMe.map(d => <DebtRow key={d.key} debt={d} />)}
+            {owedToMe.map(pair => <PairRow key={pair.pairKey} pair={pair} />)}
           </div>
         </div>
       )}
@@ -808,7 +837,29 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             Alle weiteren Schulden
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {otherDebts.map(d => <DebtRow key={d.key} debt={d} />)}
+            {otherDebts.map(pair => <PairRow key={pair.pairKey} pair={pair} />)}
+          </div>
+        </div>
+      )}
+
+      {balancedPairs.length > 0 && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
+            Verrechnet
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {balancedPairs.map(pair => <PairRow key={pair.pairKey} pair={pair} />)}
+          </div>
+        </div>
+      )}
+
+      {settledPairs.length > 0 && (
+        <div>
+          <p style={{ fontSize: 12, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
+            Beglichen
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {settledPairs.map(pair => <PairRow key={pair.pairKey} pair={pair} />)}
           </div>
         </div>
       )}
@@ -816,7 +867,6 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
   );
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -865,7 +915,6 @@ export default function Home() {
     <>
       <ViewportMeta />
       <Head><title>Splitly</title></Head>
-      {/* Header – fixed at top */}
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -884,7 +933,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Scrollable content – padded so it doesn't hide under header or nav */}
       <div style={{ paddingTop: 64, paddingBottom: 80 }}>
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '20px 16px' }}>
           {loadingData ? (
@@ -899,7 +947,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Bottom Nav – always fixed at bottom */}
       <div style={{
         position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 20,
         background: 'var(--surface)', borderTop: '1px solid var(--border)',
