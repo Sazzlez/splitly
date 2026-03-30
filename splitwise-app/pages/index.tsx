@@ -1296,10 +1296,10 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
               {pair.hasNetting && (
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Verrechnung vorhanden
+                  Verrechnung vorhanden •
                 </span>
               )}
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>Tippen für Details</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>n für Details</span>
             </div>
           </div>
 
@@ -1336,7 +1336,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
       <div>
         <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Schulden</h2>
         <p style={{ fontSize: 13, color: 'var(--muted)' }}>
-          Gegenseitige Schulden werden automatisch verrechnet. Tippe auf einen Eintrag für die genaue Herleitung.
+          Gegenseitige Schulden werden automatisch verrechnet. Tippe auf einen Eintrag für mehr Details.
         </p>
       </div>
 
