@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap&font-display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -11,7 +11,8 @@
   --accent2: #f59e0b;
   --danger: #f87171;
   --text: #f4f4f5;
-  --muted: #71717a;
+  --muted: #a1a1aa;        /* war #71717a – zu wenig Kontrast auf dunklem Bg */
+  --muted-subtle: #71717a; /* für dezente Trennelemente & Icons */
   --radius: 14px;
 }
 
