@@ -528,149 +528,171 @@ function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
 function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
   expenses: Expense[]; users: User[]; currentUser: User; token: string; onRefresh: () => void;
 }) {
-  const [settlingPair, setSettlingPair] = useState<string | null>(null);
+  const [settlingKey, setSettlingKey] = useState<string | null>(null);
   const getName = (id: string) => users.find(u => u.id === id)?.name || id;
 
-  // ── Schritt 1: Alle offenen Einzel-Schulden pro Paar aufsammeln ──────────────
-  // pairRaw[A][B] = Summe aller nicht-beglichenen Beträge die B an A schuldet
-  const pairOpen: Record<string, Record<string, number>> = {};
-  // openIds[A][B] = Liste der Expense-IDs die diesen Betrag ausmachen (für Toggle)
-  const openIds: Record<string, Record<string, string[]>> = {};
-
-  const ensurePair = (a: string, b: string) => {
-    if (!pairOpen[a]) pairOpen[a] = {};
-    if (!pairOpen[a][b]) pairOpen[a][b] = 0;
-    if (!openIds[a]) openIds[a] = {};
-    if (!openIds[a][b]) openIds[a][b] = [];
+  type PairKey = string;
+  type GroupedDebt = {
+    from: string;
+    to: string;
+    openAmount: number;
+    settledAmount: number;
+    openExpenseIds: string[];
+    settledExpenseIds: string[];
   };
+
+  const groups: Record<PairKey, GroupedDebt> = {};
 
   expenses.forEach(exp => {
     exp.participants.forEach(p => {
       if (p.userId === exp.paidBy) return;
       const share = (exp.amount * p.percent) / 100;
       if (share < 0.01) return;
-      // creditor = paidBy, debtor = p.userId
-      ensurePair(exp.paidBy, p.userId);
-      if (!exp.settled) {
-        pairOpen[exp.paidBy][p.userId] += share;
-        openIds[exp.paidBy][p.userId].push(exp.id);
+
+      const key = `${p.userId}__${exp.paidBy}`;
+      if (!groups[key]) {
+        groups[key] = {
+          from: p.userId,
+          to: exp.paidBy,
+          openAmount: 0,
+          settledAmount: 0,
+          openExpenseIds: [],
+          settledExpenseIds: [],
+        };
       }
-    });
-  });
 
-  // ── Schritt 2: Netting – gegenläufige Schulden verrechnen ───────────────────
-  // Für jedes Paar (A,B): Nettorichtung ist die Seite mit dem höheren Betrag.
-  // Bereits verarbeitete Paare überspringen.
-  type NetDebt = {
-    from: string;   // Schuldner (zahlt netto)
-    to: string;     // Gläubiger (bekommt netto)
-    netAmount: number;
-    // Alle offenen Expense-IDs beider Richtungen – werden beim Toggle alle settled
-    idsFrom: string[]; // offene IDs von from→to
-    idsTo: string[];   // offene IDs von to→from (werden ebenfalls beglichen)
-  };
-
-  const seen = new Set<string>();
-  const netDebts: NetDebt[] = [];
-
-  const allUserIds = users.map(u => u.id);
-  allUserIds.forEach(a => {
-    allUserIds.forEach(b => {
-      if (a === b) return;
-      const key = [a, b].sort().join('__');
-      if (seen.has(key)) return;
-      seen.add(key);
-
-      const aOwesB = pairOpen[b]?.[a] ?? 0; // b ist Gläubiger, a schuldet b
-      const bOwesA = pairOpen[a]?.[b] ?? 0; // a ist Gläubiger, b schuldet a
-
-      const net = aOwesB - bOwesA;
-      if (Math.abs(net) < 0.01) return; // ausgeglichen oder keine Schulden
-
-      if (net > 0) {
-        // a schuldet b netto
-        netDebts.push({
-          from: a, to: b, netAmount: net,
-          idsFrom: openIds[b]?.[a] ?? [],
-          idsTo: openIds[a]?.[b] ?? [],
-        });
+      if (exp.settled) {
+        groups[key].settledAmount += share;
+        groups[key].settledExpenseIds.push(exp.id);
       } else {
-        // b schuldet a netto
-        netDebts.push({
-          from: b, to: a, netAmount: -net,
-          idsFrom: openIds[a]?.[b] ?? [],
-          idsTo: openIds[b]?.[a] ?? [],
-        });
+        groups[key].openAmount += share;
+        groups[key].openExpenseIds.push(exp.id);
       }
     });
   });
 
-  const myDebts = netDebts.filter(d => d.from === currentUser.id);
-  const owedToMe = netDebts.filter(d => d.to === currentUser.id);
-  const otherDebts = netDebts.filter(d => d.from !== currentUser.id && d.to !== currentUser.id);
+  const allGroups = Object.values(groups)
+    .filter(g => g.openAmount + g.settledAmount > 0.01)
+    .sort((a, b) => {
+      if (a.to === currentUser.id && b.to !== currentUser.id) return -1;
+      if (a.to !== currentUser.id && b.to === currentUser.id) return 1;
+      if (a.from === currentUser.id && b.from !== currentUser.id) return -1;
+      if (a.from !== currentUser.id && b.from === currentUser.id) return 1;
+      return (b.openAmount + b.settledAmount) - (a.openAmount + a.settledAmount);
+    });
 
-  // ── Toggle: alle offenen Expenses beider Richtungen als beglichen markieren ──
-  const handleToggle = async (debt: NetDebt) => {
-    const key = `${debt.from}__${debt.to}`;
-    setSettlingPair(key);
-    const allIds = [...debt.idsFrom, ...debt.idsTo];
-    for (const id of allIds) {
+  const myDebts = allGroups.filter(g => g.from === currentUser.id);
+  const owedToMe = allGroups.filter(g => g.to === currentUser.id);
+  const otherDebts = allGroups.filter(g => g.from !== currentUser.id && g.to !== currentUser.id);
+
+  const handleToggle = async (group: GroupedDebt) => {
+    const key = `${group.from}__${group.to}`;
+    setSettlingKey(key);
+
+    const idsToToggle = group.openAmount > 0
+      ? group.openExpenseIds
+      : group.settledExpenseIds;
+
+    for (const id of idsToToggle) {
       await api('/api/settled', { method: 'POST', body: JSON.stringify({ id }) }, token);
     }
-    setSettlingPair(null);
+
+    setSettlingKey(null);
     onRefresh();
   };
 
-  const DebtRow = ({ debt, showSettle }: { debt: NetDebt; showSettle: boolean }) => {
-    const key = `${debt.from}__${debt.to}`;
-    const isLoading = settlingPair === key;
-    // Zeige Ursprungsbeträge als Hinweis wenn Netting stattgefunden hat
-    const aOwesB = pairOpen[debt.to]?.[debt.from] ?? 0;
-    const bOwesA = pairOpen[debt.from]?.[debt.to] ?? 0;
-    const wasNetted = aOwesB > 0.01 && bOwesA > 0.01;
+  const DebtRow = ({ group, showSettle }: { group: GroupedDebt; showSettle: boolean }) => {
+    const key = `${group.from}__${group.to}`;
+    const isLoading = settlingKey === key;
+    const allSettled = group.openAmount < 0.01 && group.settledAmount > 0.01;
+    const totalAmount = group.openAmount + group.settledAmount;
 
     return (
       <div style={{
         borderRadius: 12,
         background: 'var(--surface2)',
-        border: '1px solid var(--border)',
+        border: `1px solid ${allSettled ? 'rgba(110,231,183,0.25)' : 'var(--border)'}`,
         overflow: 'hidden',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                {getName(debt.from)}
+              <span style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: allSettled ? 'var(--muted)' : 'var(--text)',
+                textDecoration: allSettled ? 'line-through' : 'none',
+              }}>
+                {getName(group.from)}
               </span>
               <span style={{ color: 'var(--muted)', fontSize: 12 }}>→</span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                {getName(debt.to)}
+              <span style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: allSettled ? 'var(--muted)' : 'var(--text)',
+                textDecoration: allSettled ? 'line-through' : 'none',
+              }}>
+                {getName(group.to)}
               </span>
+              {allSettled && (
+                <span style={{
+                  fontSize: 10,
+                  background: 'rgba(110,231,183,0.15)',
+                  color: 'var(--accent)',
+                  borderRadius: 4,
+                  padding: '1px 6px',
+                  fontWeight: 600,
+                }}>
+                  BEGLICHEN
+                </span>
+              )}
             </div>
-            {wasNetted && (
-              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
-                {fmt(aOwesB)} − {fmt(bOwesA)} verrechnet
-              </p>
-            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+              {group.openAmount > 0.01 && (
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  Offen: <span style={{ fontFamily: 'DM Mono', color: 'var(--text)' }}>{fmt(group.openAmount)}</span>
+                </span>
+              )}
+              {group.settledAmount > 0.01 && (
+                <span style={{ fontSize: 11, color: 'var(--muted)' }}>
+                  Beglichen: <span style={{ fontFamily: 'DM Mono', color: 'var(--accent)' }}>{fmt(group.settledAmount)}</span>
+                </span>
+              )}
+            </div>
           </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
-              {fmt(debt.netAmount)}
+            <span style={{
+              fontFamily: 'DM Mono',
+              fontWeight: 700,
+              fontSize: 16,
+              color: allSettled ? 'var(--muted)' : 'var(--text)',
+            }}>
+              {fmt(totalAmount)}
             </span>
+
             {showSettle && (
               <button
-                onClick={() => handleToggle(debt)}
+                onClick={() => handleToggle(group)}
                 disabled={isLoading}
-                title="Als beglichen markieren"
+                title={allSettled ? 'Als offen markieren' : 'Als beglichen markieren'}
                 style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  border: '1.5px solid var(--border)',
-                  background: 'var(--surface)',
-                  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, transition: 'all .2s', flexShrink: 0,
-                  color: 'var(--muted)',
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  border: `1.5px solid ${allSettled ? 'var(--accent)' : 'var(--border)'}`,
+                  background: allSettled ? 'rgba(110,231,183,0.15)' : 'var(--surface)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  transition: 'all .2s',
+                  flexShrink: 0,
+                  color: allSettled ? 'var(--accent)' : 'var(--muted)',
                 }}>
-                {isLoading ? '…' : '○'}
+                {isLoading ? '…' : allSettled ? '✓' : '○'}
               </button>
             )}
           </div>
@@ -679,7 +701,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
     );
   };
 
-  if (!netDebts.length) return (
+  if (!allGroups.length) return (
     <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
       <p>Alles ausgeglichen!</p>
@@ -692,9 +714,11 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
 
       {myDebts.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Du schuldest</p>
+          <p style={{ fontSize: 12, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
+            Du schuldest
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {myDebts.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={false} />)}
+            {myDebts.map(g => <DebtRow key={`${g.from}__${g.to}`} group={g} showSettle={false} />)}
           </div>
         </div>
       )}
@@ -708,16 +732,18 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             </span>
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {owedToMe.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={true} />)}
+            {owedToMe.map(g => <DebtRow key={`${g.from}__${g.to}`} group={g} showSettle={true} />)}
           </div>
         </div>
       )}
 
       {otherDebts.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Alle weiteren Schulden</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
+            Alle weiteren Schulden
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {otherDebts.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={false} />)}
+            {otherDebts.map(g => <DebtRow key={`${g.from}__${g.to}`} group={g} showSettle={false} />)}
           </div>
         </div>
       )}
