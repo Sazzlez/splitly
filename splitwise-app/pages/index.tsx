@@ -528,102 +528,149 @@ function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
 function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
   expenses: Expense[]; users: User[]; currentUser: User; token: string; onRefresh: () => void;
 }) {
-  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [settlingPair, setSettlingPair] = useState<string | null>(null);
   const getName = (id: string) => users.find(u => u.id === id)?.name || id;
 
-  // Jede Ausgabe erzeugt pro Schuldner einen eigenen Eintrag
-  type DebtEntry = {
-    expenseId: string;
-    description: string;
-    from: string;
-    to: string;
-    amount: number;
-    settled: boolean;
+  // ── Schritt 1: Alle offenen Einzel-Schulden pro Paar aufsammeln ──────────────
+  // pairRaw[A][B] = Summe aller nicht-beglichenen Beträge die B an A schuldet
+  const pairOpen: Record<string, Record<string, number>> = {};
+  // openIds[A][B] = Liste der Expense-IDs die diesen Betrag ausmachen (für Toggle)
+  const openIds: Record<string, Record<string, string[]>> = {};
+
+  const ensurePair = (a: string, b: string) => {
+    if (!pairOpen[a]) pairOpen[a] = {};
+    if (!pairOpen[a][b]) pairOpen[a][b] = 0;
+    if (!openIds[a]) openIds[a] = {};
+    if (!openIds[a][b]) openIds[a][b] = [];
   };
 
-  const allEntries: DebtEntry[] = [];
   expenses.forEach(exp => {
     exp.participants.forEach(p => {
       if (p.userId === exp.paidBy) return;
       const share = (exp.amount * p.percent) / 100;
       if (share < 0.01) return;
-      allEntries.push({
-        expenseId: exp.id,
-        description: exp.description,
-        from: p.userId,
-        to: exp.paidBy,
-        amount: share,
-        settled: exp.settled,
-      });
+      // creditor = paidBy, debtor = p.userId
+      ensurePair(exp.paidBy, p.userId);
+      if (!exp.settled) {
+        pairOpen[exp.paidBy][p.userId] += share;
+        openIds[exp.paidBy][p.userId].push(exp.id);
+      }
     });
   });
 
-  const myDebts = allEntries.filter(e => e.from === currentUser.id && !e.settled);
-  const owedToMe = allEntries.filter(e => e.to === currentUser.id);
-  const otherDebts = allEntries.filter(e => e.from !== currentUser.id && e.to !== currentUser.id);
+  // ── Schritt 2: Netting – gegenläufige Schulden verrechnen ───────────────────
+  // Für jedes Paar (A,B): Nettorichtung ist die Seite mit dem höheren Betrag.
+  // Bereits verarbeitete Paare überspringen.
+  type NetDebt = {
+    from: string;   // Schuldner (zahlt netto)
+    to: string;     // Gläubiger (bekommt netto)
+    netAmount: number;
+    // Alle offenen Expense-IDs beider Richtungen – werden beim Toggle alle settled
+    idsFrom: string[]; // offene IDs von from→to
+    idsTo: string[];   // offene IDs von to→from (werden ebenfalls beglichen)
+  };
 
-  const handleToggle = async (entry: DebtEntry) => {
-    setSettlingId(entry.expenseId);
-    await api('/api/settled', { method: 'POST', body: JSON.stringify({ id: entry.expenseId }) }, token);
-    setSettlingId(null);
+  const seen = new Set<string>();
+  const netDebts: NetDebt[] = [];
+
+  const allUserIds = users.map(u => u.id);
+  allUserIds.forEach(a => {
+    allUserIds.forEach(b => {
+      if (a === b) return;
+      const key = [a, b].sort().join('__');
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const aOwesB = pairOpen[b]?.[a] ?? 0; // b ist Gläubiger, a schuldet b
+      const bOwesA = pairOpen[a]?.[b] ?? 0; // a ist Gläubiger, b schuldet a
+
+      const net = aOwesB - bOwesA;
+      if (Math.abs(net) < 0.01) return; // ausgeglichen oder keine Schulden
+
+      if (net > 0) {
+        // a schuldet b netto
+        netDebts.push({
+          from: a, to: b, netAmount: net,
+          idsFrom: openIds[b]?.[a] ?? [],
+          idsTo: openIds[a]?.[b] ?? [],
+        });
+      } else {
+        // b schuldet a netto
+        netDebts.push({
+          from: b, to: a, netAmount: -net,
+          idsFrom: openIds[a]?.[b] ?? [],
+          idsTo: openIds[b]?.[a] ?? [],
+        });
+      }
+    });
+  });
+
+  const myDebts = netDebts.filter(d => d.from === currentUser.id);
+  const owedToMe = netDebts.filter(d => d.to === currentUser.id);
+  const otherDebts = netDebts.filter(d => d.from !== currentUser.id && d.to !== currentUser.id);
+
+  // ── Toggle: alle offenen Expenses beider Richtungen als beglichen markieren ──
+  const handleToggle = async (debt: NetDebt) => {
+    const key = `${debt.from}__${debt.to}`;
+    setSettlingPair(key);
+    const allIds = [...debt.idsFrom, ...debt.idsTo];
+    for (const id of allIds) {
+      await api('/api/settled', { method: 'POST', body: JSON.stringify({ id }) }, token);
+    }
+    setSettlingPair(null);
     onRefresh();
   };
 
-  const DebtRow = ({ entry, showSettle }: { entry: DebtEntry; showSettle: boolean }) => {
-    const isLoading = settlingId === entry.expenseId;
+  const DebtRow = ({ debt, showSettle }: { debt: NetDebt; showSettle: boolean }) => {
+    const key = `${debt.from}__${debt.to}`;
+    const isLoading = settlingPair === key;
+    // Zeige Ursprungsbeträge als Hinweis wenn Netting stattgefunden hat
+    const aOwesB = pairOpen[debt.to]?.[debt.from] ?? 0;
+    const bOwesA = pairOpen[debt.from]?.[debt.to] ?? 0;
+    const wasNetted = aOwesB > 0.01 && bOwesA > 0.01;
+
     return (
       <div style={{
         borderRadius: 12,
         background: 'var(--surface2)',
-        border: `1px solid ${entry.settled ? 'rgba(110,231,183,0.2)' : 'var(--border)'}`,
+        border: '1px solid var(--border)',
         overflow: 'hidden',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <span style={{
-                fontSize: 14, fontWeight: 600,
-                color: entry.settled ? 'var(--muted)' : 'var(--text)',
-                textDecoration: entry.settled ? 'line-through' : 'none',
-              }}>
-                {getName(entry.from)}
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                {getName(debt.from)}
               </span>
               <span style={{ color: 'var(--muted)', fontSize: 12 }}>→</span>
-              <span style={{
-                fontSize: 14, fontWeight: 600,
-                color: entry.settled ? 'var(--muted)' : 'var(--text)',
-                textDecoration: entry.settled ? 'line-through' : 'none',
-              }}>
-                {getName(entry.to)}
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                {getName(debt.to)}
               </span>
-              {entry.settled && (
-                <span style={{ fontSize: 10, background: 'rgba(110,231,183,0.2)', color: '#34d399', borderRadius: 4, padding: '1px 6px', fontWeight: 700, letterSpacing: '0.04em' }}>
-                  BEGLICHEN
-                </span>
-              )}
             </div>
-            <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {entry.description}
-            </p>
+            {wasNetted && (
+              <p style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3 }}>
+                {fmt(aOwesB)} − {fmt(bOwesA)} verrechnet
+              </p>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 16, color: entry.settled ? 'var(--muted)' : 'var(--text)' }}>
-              {fmt(entry.amount)}
+            <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
+              {fmt(debt.netAmount)}
             </span>
             {showSettle && (
               <button
-                onClick={() => handleToggle(entry)}
+                onClick={() => handleToggle(debt)}
                 disabled={isLoading}
-                title={entry.settled ? 'Als offen markieren' : 'Als beglichen markieren'}
+                title="Als beglichen markieren"
                 style={{
                   width: 32, height: 32, borderRadius: 8,
-                  border: `1.5px solid ${entry.settled ? 'var(--accent)' : 'var(--border)'}`,
-                  background: entry.settled ? 'rgba(110,231,183,0.15)' : 'var(--surface)',
+                  border: '1.5px solid var(--border)',
+                  background: 'var(--surface)',
                   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 14, transition: 'all .2s', flexShrink: 0,
-                  color: entry.settled ? 'var(--accent)' : 'var(--muted)',
+                  color: 'var(--muted)',
                 }}>
-                {isLoading ? '…' : entry.settled ? '✓' : '○'}
+                {isLoading ? '…' : '○'}
               </button>
             )}
           </div>
@@ -632,7 +679,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
     );
   };
 
-  if (!allEntries.length) return (
+  if (!netDebts.length) return (
     <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
       <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
       <p>Alles ausgeglichen!</p>
@@ -647,7 +694,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
         <div>
           <p style={{ fontSize: 12, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Du schuldest</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {myDebts.map((e) => <DebtRow key={e.expenseId + e.from} entry={e} showSettle={false} />)}
+            {myDebts.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={false} />)}
           </div>
         </div>
       )}
@@ -661,7 +708,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             </span>
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {owedToMe.map((e) => <DebtRow key={e.expenseId + e.from} entry={e} showSettle={true} />)}
+            {owedToMe.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={true} />)}
           </div>
         </div>
       )}
@@ -670,7 +717,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
         <div>
           <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Alle weiteren Schulden</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {otherDebts.map((e) => <DebtRow key={e.expenseId + e.from} entry={e} showSettle={false} />)}
+            {otherDebts.map(d => <DebtRow key={d.from + d.to} debt={d} showSettle={false} />)}
           </div>
         </div>
       )}
