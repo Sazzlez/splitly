@@ -75,7 +75,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('de-DE', { day
 function Input({ label, ...props }: { label: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>{label}</label>
+      <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{label}</label>
       <input {...props} style={{
         background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10,
         color: 'var(--text)', padding: '10px 14px', fontSize: 15, outline: 'none', width: '100%',
@@ -120,7 +120,7 @@ function Card({ children, style }: { children: React.ReactNode; style?: React.CS
 function Select({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500 }}>{label}</label>
+      <label style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>{label}</label>
       <select value={value} onChange={e => onChange(e.target.value)} style={{
         background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 10,
         color: 'var(--text)', padding: '10px 14px', fontSize: 15, outline: 'none', width: '100%',
@@ -168,12 +168,12 @@ function ParticipantEditor({ users, participants, setParticipants, amount }: {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <span style={{ fontSize: 14, fontWeight: 500 }}>Aufteilen auf</span>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Aufteilen auf</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 12, color: Math.abs(totalPercent - 100) > 0.1 ? 'var(--danger)' : 'var(--accent)', fontFamily: 'DM Mono' }}>
             {totalPercent.toFixed(1)}%
           </span>
-          <button onClick={distribute} style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer' }}>
+          <button onClick={distribute} style={{ fontSize: 11, color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontWeight: 500 }}>
             Gleichmäßig
           </button>
         </div>
@@ -502,7 +502,7 @@ function ActivityTab({ expenses, users, currentUser, token, onRefresh }: {
                   {exp.participants.map(p => (
                     <span key={p.userId} style={{
                       fontSize: 11, background: 'var(--surface2)', border: '1px solid var(--border)',
-                      borderRadius: 6, padding: '2px 7px', color: 'var(--muted)',
+                      borderRadius: 6, padding: '2px 7px', color: 'var(--text)',
                     }}>
                       {getName(p.userId)} {p.percent.toFixed(0)}%
                     </span>
@@ -615,7 +615,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
                 {getName(g.to)}
               </span>
               {allSettled && (
-                <span style={{ fontSize: 10, background: 'rgba(110,231,183,0.15)', color: 'var(--accent)', borderRadius: 4, padding: '1px 6px', fontWeight: 600, marginLeft: 2 }}>
+                <span style={{ fontSize: 10, background: 'rgba(110,231,183,0.2)', color: '#34d399', borderRadius: 4, padding: '1px 6px', fontWeight: 700, marginLeft: 2, letterSpacing: '0.04em' }}>
                   BEGLICHEN
                 </span>
               )}
@@ -672,7 +672,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
 
       {myDebts.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, marginBottom: 8 }}>Du schuldest</p>
+          <p style={{ fontSize: 12, color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Du schuldest</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {myDebts.map((g, i) => <GroupRow key={i} g={g} showSettle={false} />)}
           </div>
@@ -681,7 +681,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
 
       {owedToMe.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, marginBottom: 8 }}>
+          <p style={{ fontSize: 12, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>
             Dir wird geschuldet
             <span style={{ marginLeft: 6, color: 'var(--muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0, fontSize: 11 }}>
               (○ = als beglichen markieren)
@@ -695,7 +695,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
 
       {otherDebts.length > 0 && (
         <div>
-          <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 500, marginBottom: 8 }}>Alle weiteren Schulden</p>
+          <p style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 8 }}>Alle weiteren Schulden</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {otherDebts.map((g, i) => <GroupRow key={i} g={g} showSettle={false} />)}
           </div>
@@ -765,7 +765,7 @@ export default function Home() {
           <span style={{ fontWeight: 600, letterSpacing: '-0.02em' }}>splitly</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Hi, {currentUser.name}</span>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>Hi, <span style={{ color: 'var(--text)', fontWeight: 500 }}>{currentUser.name}</span></span>
           <button onClick={handleLogout} style={{ fontSize: 12, color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 7, padding: '5px 10px', cursor: 'pointer', fontFamily: 'DM Sans' }}>
             Logout
           </button>
@@ -804,7 +804,7 @@ export default function Home() {
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <span style={{ fontSize: 16, color: tab === t.id ? 'var(--accent)' : 'var(--muted)' }}>{t.icon}</span>
-              <span style={{ fontSize: 11, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? 'var(--accent)' : 'var(--muted)' }}>{t.label}</span>
+              <span style={{ fontSize: 11, fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? 'var(--accent)' : 'var(--muted)', letterSpacing: tab === t.id ? '-0.01em' : '0' }}>{t.label}</span>
             </button>
           ))}
         </div>
