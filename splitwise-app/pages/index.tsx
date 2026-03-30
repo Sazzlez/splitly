@@ -1296,10 +1296,10 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
             <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
               {pair.hasNetting && (
                 <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  Verrechnung vorhanden •
+                  Verrechnet
                 </span>
               )}
-              <span style={{ fontSize: 12, color: 'var(--muted)' }} • für Details</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }} • Öffnen für Details</span>
             </div>
           </div>
 
