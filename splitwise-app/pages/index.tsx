@@ -1299,7 +1299,7 @@ function DebtsTab({ expenses, users, currentUser, token, onRefresh }: {
                   Verrechnung vorhanden •
                 </span>
               )}
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>n für Details</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }} • für Details</span>
             </div>
           </div>
 
